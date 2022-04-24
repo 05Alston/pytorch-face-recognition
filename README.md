@@ -29,3 +29,6 @@ if you get error while installing torch package, go to [Pytorch](ttps://pytorch.
 Then install facenet_pytorch package with `pip install facenet_pytorch`
 
 Finally run the main.py file
+
+
+If edited the **photos** folder, delete the data.pt file and rerun the code.
