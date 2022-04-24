@@ -6,32 +6,33 @@ from PIL import Image
 import cv2
 import time
 import os
-
+mtcnn0 = MTCNN(image_size=240, margin=0, keep_all=False, min_face_size=40)
 mtcnn = MTCNN(image_size=240, margin=0, keep_all=True, min_face_size=40)
 resnet = InceptionResnetV1(pretrained='vggface2').eval() 
 
 
-dataset = datasets.ImageFolder('photos') # photos folder path 
-idx_to_class = {i:c for c,i in dataset.class_to_idx.items()} # accessing names of peoples from folder names
+if not os.path.exists('./data.pt'):
+    dataset = datasets.ImageFolder('photos') # photos folder path 
+    idx_to_class = {i:c for c,i in dataset.class_to_idx.items()} # accessing names of peoples from folder names
 
-def collate_fn(x):
-    return x[0]
+    def collate_fn(x):
+        return x[0]
 
-loader = DataLoader(dataset, collate_fn=collate_fn)
+    loader = DataLoader(dataset, collate_fn=collate_fn)
 
-name_list = [] # list of names corrospoing to cropped photos
-embedding_list = [] # list of embeding matrix after conversion from cropped faces to embedding matrix using resnet
+    name_list = [] # list of names corrospoing to cropped photos
+    embedding_list = [] # list of embeding matrix after conversion from cropped faces to embedding matrix using resnet
 
-for img, idx in loader:
-    face, prob = mtcnn(img, return_prob=True) 
-    if face is not None and prob>0.92:
-        emb = resnet(face.unsqueeze(0)) 
-        embedding_list.append(emb.detach()) 
-        name_list.append(idx_to_class[idx])        
+    for img, idx in loader:
+        face, prob = mtcnn0(img, return_prob=True) 
+        if face is not None and prob>0.92:
+            emb = resnet(face.unsqueeze(0)) 
+            embedding_list.append(emb.detach()) 
+            name_list.append(idx_to_class[idx])        
 
-# save data
-data = [embedding_list, name_list] 
-torch.save(data, 'data.pt') # saving data.pt file
+    # save data
+    data = [embedding_list, name_list] 
+    torch.save(data, 'data.pt') # saving data.pt file
 
 
 # Using webcam recognize face
@@ -72,10 +73,9 @@ while True:
                 box = boxes[i] 
                 original_frame = frame.copy() # storing copy of frame before drawing on it
                 
-                if min_dist<0.90:
-                    frame = cv2.putText(frame, name+' '+str(min_dist), (box[0],box[1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0),1, cv2.LINE_AA)
-                
-                frame = cv2.rectangle(frame, (box[0],box[1]) , (box[2],box[3]), (255,0,0), 2)
+                #if min_dist<0.90:
+                 #   frame = cv2.putText(frame, name+' '+str(min_dist), (float(box[0]), float(box[1])), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0),1, cv2.LINE_AA)   
+                frame = cv2.rectangle(frame, (int(box[0]),int(box[1])) , (int(box[2]),int(box[3])), (255,0,0), 2)
 
     cv2.imshow("IMG", frame)
         
