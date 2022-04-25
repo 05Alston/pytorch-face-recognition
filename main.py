@@ -73,8 +73,8 @@ while True:
                 box = boxes[i] 
                 original_frame = frame.copy() # storing copy of frame before drawing on it
                 
-                #if min_dist<0.90:
-                 #   frame = cv2.putText(frame, name+' '+str(min_dist), (float(box[0]), float(box[1])), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0),1, cv2.LINE_AA)   
+                if min_dist>0.90:
+                    frame = cv2.putText(frame, name+' '+str(min_dist), (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0),1, cv2.LINE_AA)   
                 frame = cv2.rectangle(frame, (int(box[0]),int(box[1])) , (int(box[2]),int(box[3])), (255,0,0), 2)
 
     cv2.imshow("IMG", frame)
