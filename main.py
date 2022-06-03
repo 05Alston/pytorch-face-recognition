@@ -1,103 +1,107 @@
-from facenet_pytorch import MTCNN, InceptionResnetV1
-import torch
-from torchvision import datasets
-from torch.utils.data import DataLoader
-from PIL import Image
-import cv2
-import time
 import os
-mtcnn0 = MTCNN(image_size=240, margin=0, keep_all=False, min_face_size=40)
-mtcnn = MTCNN(image_size=240, margin=0, keep_all=True, min_face_size=40)
-resnet = InceptionResnetV1(pretrained='vggface2').eval() 
+from os import listdir
+from PIL import Image as Img
+from numpy import asarray
+from numpy import expand_dims
+from matplotlib import pyplot
+from keras.models import load_model
+import numpy as np
+import tensorflow as tf
+import pickle
+import cv2
 
 
-if not os.path.exists('./data.pt'):
-    dataset = datasets.ImageFolder('photos') # photos folder path 
-    idx_to_class = {i:c for c,i in dataset.class_to_idx.items()} # accessing names of peoples from folder names
+HaarCascade = cv2.CascadeClassifier(cv2.samples.findFile(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'))
+MyFaceNet = load_model("facenet_keras.h5")
 
-    def collate_fn(x):
-        return x[0]
+folder='photos/'
+database = {}
 
-    loader = DataLoader(dataset, collate_fn=collate_fn)
+for filename in listdir(folder):
 
-    name_list = [] # list of names corrospoing to cropped photos
-    embedding_list = [] # list of embeding matrix after conversion from cropped faces to embedding matrix using resnet
-
-    for img, idx in loader:
-        face, prob = mtcnn0(img, return_prob=True) 
-        if face is not None and prob>0.92:
-            emb = resnet(face.unsqueeze(0)) 
-            embedding_list.append(emb.detach()) 
-            name_list.append(idx_to_class[idx])        
-
-    # save data
-    data = [embedding_list, name_list] 
-    torch.save(data, 'data.pt') # saving data.pt file
-
-
-# Using webcam recognize face
-
-# loading data.pt file
-load_data = torch.load('data.pt') 
-embedding_list = load_data[0] 
-name_list = load_data[1] 
-
-cam = cv2.VideoCapture(0) 
-
-while True:
-    ret, frame = cam.read()
-    if not ret:
-        print("fail to grab frame, try again")
-        break
-        
-    img = Image.fromarray(frame)
-    img_cropped_list, prob_list = mtcnn(img, return_prob=True) 
+    path = folder + filename
+    gbr1 = cv2.imread(path)
     
-    if img_cropped_list is not None:
-        boxes, _ = mtcnn.detect(img)
-                
-        for i, prob in enumerate(prob_list):
-            if prob>0.90:
-                emb = resnet(img_cropped_list[i].unsqueeze(0)).detach() 
-                
-                dist_list = [] # list of matched distances, minimum distance is used to identify the person
-                
-                for idx, emb_db in enumerate(embedding_list):
-                    dist = torch.dist(emb, emb_db).item()
-                    dist_list.append(dist)
-
-                min_dist = min(dist_list) # get minumum dist value
-                min_dist_idx = dist_list.index(min_dist) # get minumum dist index
-                name = name_list[min_dist_idx] # get name corrosponding to minimum dist
-                
-                box = boxes[i] 
-                original_frame = frame.copy() # storing copy of frame before drawing on it
-                
-                if min_dist>0.90:
-                    frame = cv2.putText(frame, name+' '+str(min_dist), (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0),1, cv2.LINE_AA)   
-                frame = cv2.rectangle(frame, (int(box[0]),int(box[1])) , (int(box[2]),int(box[3])), (255,0,0), 2)
-
-    cv2.imshow("IMG", frame)
-        
+    wajah = HaarCascade.detectMultiScale(gbr1,1.1,4)
     
-    k = cv2.waitKey(1)
-    if k%256==27: # ESC
-        print('Esc pressed, closing...')
-        break
+    if len(wajah)>0:
+        x1, y1, width, height = wajah[0]         
+    else:
+        x1, y1, width, height = 1, 1, 10, 10
         
-    elif k%256==32: # space to save image
-        print('Enter your name :')
-        name = input()
-        
-        # create directory if not exists
-        if not os.path.exists('photos/'+name):
-            os.mkdir('photos/'+name)
+    x1, y1 = abs(x1), abs(y1)
+    x2, y2 = x1 + width, y1 + height
+    
+    gbr = cv2.cvtColor(gbr1, cv2.COLOR_BGR2RGB)
+    gbr = Img.fromarray(gbr)                 
+    gbr_array = asarray(gbr)
+    
+    face = gbr_array[y1:y2, x1:x2]                        
+    
+    face = Img.fromarray(face)                       
+    face = face.resize((160,160))
+    face = asarray(face)
+    
+    face = face.astype('float32')
+    mean, std = face.mean(), face.std()
+    face = (face - mean) / std
+    
+    face = expand_dims(face, axis=0)
+    signature = MyFaceNet.predict(face)
+    
+    database[os.path.splitext(filename)[0]]=signature
+
+myfile = open("data.pkl", "wb")
+pickle.dump(database, myfile)
+myfile.close()
+
+myfile = open("data.pkl", "rb")
+database = pickle.load(myfile)
+myfile.close()
+
+def js_to_image(js_reply):
+  image_bytes = b64decode(js_reply.split(',')[1])
+  jpg_as_np = np.frombuffer(image_bytes, dtype=np.uint8)
+  img = cv2.imdecode(jpg_as_np, flags=1)
+  return img
+
+def findFaces(data):
+  gbr1 = js_to_image(data)
+  gbr = cv2.cvtColor(gbr1, cv2.COLOR_BGR2RGB)
+  gbr = Img.fromarray(gbr)                  # konversi dari OpenCV ke PIL
+  gbr_array = asarray(gbr)
+ 
+  wajah = HaarCascade.detectMultiScale(gbr1,1.1,4)
+  
+  for (x1,y1,w,h) in wajah:
+      x1, y1 = abs(x1), abs(y1)
+      x2, y2 = x1 + w, y1 + h
+    
+      face = gbr_array[y1:y2, x1:x2]                        
+    
+      face = Img.fromarray(face)                       
+      face = face.resize((160,160))
+      face = asarray(face)
+    
+      face = face.astype('float32')
+      mean, std = face.mean(), face.std()
+      face = (face - mean) / std
+    
+      face = expand_dims(face, axis=0)
+      signature = MyFaceNet.predict(face)
+    
+      min_dist=100
+      identity=' '
+      for key, value in database.items() :
+        dist = np.linalg.norm(value-signature)
+        if dist < min_dist:
+          min_dist = dist
+          identity = key
             
-        img_name = "photos/{}/{}.jpg".format(name, int(time.time()))
-        cv2.imwrite(img_name, original_frame)
-        print(" saved: {}".format(img_name))
-        
-        
-cam.release()
-cv2.destroyAllWindows()
-    
+      cv2.putText(gbr1,identity, (x1,y1),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
+      cv2.rectangle(gbr1,(x1,y1),(x2,y2), (0,255,0), 2)
+  
+  filename='photo.jpg'
+  cv2.imwrite(filename, gbr1)
+  
+  return filename
